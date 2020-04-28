@@ -30,6 +30,8 @@ parser.add_argument('--temperature', type=float, default=1.0,
                     help='temperature - higher will increase diversity')
 parser.add_argument('--log-interval', type=int, default=100,
                     help='reporting interval')
+parser.add_argument('--strategy', type=str, default='sampling',
+                    help='generation strategy (sampling or greedy)')
 args = parser.parse_args()
 
 # Set the random seed manually for reproducibility.
@@ -55,6 +57,9 @@ if not is_transformer_model:
     hidden = model.init_hidden(1)
 input = torch.randint(ntokens, (1, 1), dtype=torch.long).to(device)
 
+if args.strategy != 'sampling' and args.strategy != 'greedy':
+    print('Chosen strategy is not valid. Sampling is being used.')
+
 with open(args.outf, 'w') as outf:
     with torch.no_grad():  # no tracking history
         for i in range(args.words):
@@ -64,6 +69,12 @@ with open(args.outf, 'w') as outf:
                 word_idx = torch.multinomial(word_weights, 1)[0]
                 word_tensor = torch.Tensor([[word_idx]]).long().to(device)
                 input = torch.cat([input, word_tensor], 0)
+            elif args.strategy == 'greedy':
+                output, hidden = model(input, hidden)
+
+                word_weights = output.squeeze().div(args.temperature).exp().cpu()
+                word_idx = word_weights.max(0)[1].item()
+                input.fill_(word_idx)
             else:
                 output, hidden = model(input, hidden)
                 word_weights = output.squeeze().div(args.temperature).exp().cpu()
